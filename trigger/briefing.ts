@@ -1,6 +1,6 @@
 import { task, schedules } from "@trigger.dev/sdk/v3";
 import { insforge } from "../lib/insforge";
-import { GoogleGenAI } from "@google/genai";
+import { aiGenerate, hasAiKey } from "../lib/ai-provider";
 import { format } from "date-fns";
 
 const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
@@ -150,12 +150,8 @@ export const generateBriefingTask = task({
     }
 
     const hasAnyData = gmailMessages.length > 0 || whatsappMessages.length > 0;
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-
-    // Generate with Gemini if data is available
-    if (geminiApiKey && hasAnyData) {
+    if (hasAiKey() && hasAnyData) {
       try {
-        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
         const prompt = `You are OmniSync, an AI personal assistant. Analyze the following real communications fetched from the user's connected apps and produce a structured intelligence briefing.
 
@@ -188,13 +184,7 @@ Analyze the REAL data above. Produce valid JSON:
 
 RULES: Base ALL content ONLY on the real data provided. Do NOT invent anything. Only include categories: ${categories.join(", ")}. Return valid JSON only.`;
 
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: { responseMimeType: "application/json" }
-        });
-
-        const textResponse = response.text;
+        const textResponse = await aiGenerate(prompt, true);
         if (textResponse) {
           const parsed = JSON.parse(textResponse);
           const { data, error } = await insforge.database
