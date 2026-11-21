@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { aiGenerate, hasAiKey } from "@/lib/ai-provider";
 import { hasInsforgeAdminKey, insforgeAdmin } from "@/lib/insforge-admin";
 import { publishAlertRealtimeEvent } from "@/lib/alerts-realtime";
 
@@ -162,12 +162,9 @@ export async function GET(req: NextRequest) {
     const activitySummary = await fetchActivitySummary(req.nextUrl.origin, userId, connectedApps);
     let suggestions = buildDeterministicSuggestions(connectedApps, activitySummary);
 
-    if (process.env.GEMINI_API_KEY && activitySummary.terms.length > 0) {
+    if (hasAiKey() && activitySummary.terms.length > 0) {
       try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: `Create up to 3 useful alert recommendations from the user's real connected app activity.
+        const textResponse = await aiGenerate(`Create up to 3 useful alert recommendations from the user's real connected app activity.
 
 Connected monitored apps: ${connectedApps.join(", ")}
 Activity counts: ${JSON.stringify(activitySummary)}
@@ -186,10 +183,8 @@ Return valid JSON only:
   }
 ]
 
-Only use connected monitored apps. Do not invent activity.`,
-          config: { responseMimeType: "application/json" }
-        });
-        const parsed = JSON.parse(response.text || "[]");
+Only use connected monitored apps. Do not invent activity.`, true);
+        const parsed = JSON.parse(textResponse || "[]");
         if (Array.isArray(parsed)) {
           suggestions = parsed
             .filter((item: Partial<Suggestion>) => Array.isArray(item.apps) && item.apps.every((app: string) => connectedApps.includes(app)))
