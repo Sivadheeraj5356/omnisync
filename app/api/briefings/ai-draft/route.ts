@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { aiGenerate, hasAiKey } from "@/lib/ai-provider";
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,12 +9,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Context or body is required" }, { status: 400 });
     }
 
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (!geminiApiKey) {
+    if (!hasAiKey()) {
       return NextResponse.json({ error: "AI service not configured" }, { status: 503 });
     }
-
-    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
     const isEmail = type === "email" || replyType === "email";
 
@@ -45,12 +42,10 @@ Instructions:
 - Address the key point of the message
 - Output only the message text, no formatting`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt
-    });
-
-    const draft = response.text || "";
+    const draft = (await aiGenerate(prompt)) || "";
+    if (!draft) {
+      return NextResponse.json({ error: "AI providers are unavailable" }, { status: 502 });
+    }
 
     return NextResponse.json({ draft: draft.trim() });
   } catch (err: any) {
