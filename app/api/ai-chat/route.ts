@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { insforge } from "@/lib/insforge";
-import { GoogleGenAI } from "@google/genai";
+import { aiGenerate, hasAiKey } from "@/lib/ai-provider";
 
 export async function POST(req: NextRequest) {
   try {
@@ -87,29 +87,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Set up Gemini model
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      // Fallback response if API key is not configured
+    if (!hasAiKey()) {
       return NextResponse.json({
-        response: "Hello! I am in simulated mode since no `GEMINI_API_KEY` was configured. I see you connected platforms and can simulate response details here. Please configure your Gemini API Key to chat.",
+        response: "Hello! I am in simulated mode since no AI provider key was configured. I see you connected platforms and can simulate response details here. Please configure an AI API key to chat.",
         suggestions: ["How do I connect Gmail?", "Check my updates", "Draft a template response"]
       });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
-
-    // Format chat history for Gemini
     const formattedHistory = history.map((h: any) => ({
-      role: h.sender === "user" ? "user" : "model",
-      parts: [{ text: h.text }]
+      role: (h.sender === "user" ? "user" : "model") as "user" | "model",
+      text: h.text
     }));
-
-    // Add current user prompt
-    formattedHistory.push({
-      role: "user",
-      parts: [{ text: prompt }]
-    });
+    formattedHistory.push({ role: "user", text: prompt });
 
     const systemPrompt = `You are OmniSync, an advanced AI Personal Assistant.
 You help the user stay productive by tracking communications across their connected platforms (Gmail, WhatsApp, Slack, Outlook, Discord, LinkedIn, Telegram, etc.).
@@ -145,18 +134,10 @@ Instructions:
 
 Make sure the JSON is valid.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-lite",
-      contents: [
-        { role: "user", parts: [{ text: systemPrompt }] },
-        ...formattedHistory
-      ],
-      config: {
-        responseMimeType: "application/json"
-      }
-    });
-
-    const textResponse = response.text;
+    const textResponse = await aiGenerate([
+      { role: "user", text: systemPrompt },
+      ...formattedHistory
+    ], true, "gemini-3.1-flash-lite");
     if (textResponse) {
       try {
         const parsed = JSON.parse(textResponse);
