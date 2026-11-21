@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { aiGenerate, hasAiKey } from "@/lib/ai-provider";
 import { hasInsforgeAdminKey, insforgeAdmin } from "@/lib/insforge-admin";
 
 function getErrorMessage(error: unknown): string {
@@ -37,15 +37,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (!geminiApiKey) {
+    if (!hasAiKey()) {
       return NextResponse.json(
-        { error: "AI service is not configured (GEMINI_API_KEY missing)" },
+        { error: "AI service is not configured (GEMINI_API_KEY, GROQ_API_KEY or OPENROUTER_API_KEY required)" },
         { status: 503 }
       );
     }
-
-    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
     let prompt = "";
 
     if (feature === "summary") {
@@ -105,12 +102,7 @@ Instructions:
       return NextResponse.json({ error: "Invalid feature requested" }, { status: 400 });
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-    });
-
-    const resultText = response.text || "";
+    const resultText = (await aiGenerate(prompt)) || "";
 
     return NextResponse.json({ result: resultText.trim() });
   } catch (err: unknown) {
