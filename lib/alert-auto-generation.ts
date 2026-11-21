@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { aiGenerate, hasAiKey } from "./ai-provider";
 import { hasInsforgeAdminKey, insforgeAdmin } from "./insforge-admin";
 import { publishAlertRealtimeEvent } from "./alerts-realtime";
 
@@ -157,14 +157,10 @@ function buildHeuristicCandidates(activity: AppActivity[]): AlertCandidate[] {
 }
 
 async function buildAiCandidates(activity: AppActivity[]): Promise<AlertCandidate[]> {
-  const geminiApiKey = process.env.GEMINI_API_KEY;
-  if (!geminiApiKey || activity.length === 0) return buildHeuristicCandidates(activity);
+  if (!hasAiKey() || activity.length === 0) return buildHeuristicCandidates(activity);
 
   try {
-    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `You are OmniSync's alert monitor. Analyze only this real connected app activity and return important alerts that deserve the user's attention.
+    const textResponse = await aiGenerate(`You are OmniSync's alert monitor. Analyze only this real connected app activity and return important alerts that deserve the user's attention.
 
 Real activity:
 ${JSON.stringify(activity.slice(0, 25), null, 2)}
@@ -187,11 +183,9 @@ Return valid JSON only:
 Rules:
 - Only create alerts for genuinely important items: deadlines, approvals, unanswered direct asks, urgent language, follow-ups, blockers, invoices, tasks, or commitments.
 - Do not invent facts.
-- Return [] if nothing is important.`,
-      config: { responseMimeType: "application/json" }
-    });
+- Return [] if nothing is important.`, true);
 
-    const parsed = JSON.parse(response.text || "[]");
+    const parsed = JSON.parse(textResponse || "[]");
     if (!Array.isArray(parsed)) return [];
 
     const activityIds = new Set(activity.map(item => `${item.app}:${item.id}`));
