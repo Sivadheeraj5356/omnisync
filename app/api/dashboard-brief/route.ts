@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { format } from "date-fns";
 import { insforge } from "@/lib/insforge";
-import { GoogleGenAI } from "@google/genai";
+import { aiGenerate, hasAiKey } from "@/lib/ai-provider";
 
 const MOCK_BRIEF_DATA = {
   stats: {
@@ -139,13 +139,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Generate with Gemini if Key is available and at least one app is connected
-    const hasApiKey = !!process.env.GEMINI_API_KEY;
+    const hasApiKey = hasAiKey();
     const hasData = gmailMessages.length > 0 || whatsappMessages.length > 0;
 
     if (hasApiKey && hasData) {
       try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const systemPrompt = `You are an advanced AI personal assistant named OmniSync.
 Analyze the following recent email and chat communications.
 Generate a structured intelligence briefing for the user's dashboard today.
@@ -194,15 +192,7 @@ CRITICAL FOR SPEED AND USER EXPERIENCE:
 3. Priority count, important count, and followUp count should match the number of relevant tasks identified from the messages.
 4. Output must generate within 1-2 seconds. Make it snappy and direct.`;
 
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: systemPrompt,
-          config: {
-            responseMimeType: "application/json"
-          }
-        });
-
-        const textResponse = response.text;
+        const textResponse = await aiGenerate(systemPrompt, true);
         if (textResponse) {
           const parsed = JSON.parse(textResponse);
           const newBriefData = {
@@ -246,7 +236,7 @@ CRITICAL FOR SPEED AND USER EXPERIENCE:
       ...customMockData,
       generatedAt: new Date().toISOString(),
       isSimulated: true,
-      warn: !hasApiKey ? "GEMINI_API_KEY env var missing. Running in simulated fallback mode." : undefined
+      warn: !hasApiKey ? "AI provider env var missing (GEMINI_API_KEY, GROQ_API_KEY or OPENROUTER_API_KEY). Running in simulated fallback mode." : undefined
     };
 
     // Save mock configuration/preview to database so we don't query it repeatedly
